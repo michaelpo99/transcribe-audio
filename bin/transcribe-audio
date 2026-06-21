@@ -774,7 +774,6 @@ if [[ -n "$transcript_dir_spec" ]]; then
 else
     transcript_dir="$target_dir/transcript"
 fi
-mkdir -p "$transcript_dir"
 
 audio_scan_file="$(mktemp)"
 video_scan_file="$(mktemp)"
@@ -846,6 +845,19 @@ attempted_duration_ms=0
 attempted_size_bytes=0
 skipped_duration_ms=0
 skipped_size_bytes=0
+
+print_check_selection() {
+    local selected_path
+    if (( selector_option_count == 1 )); then
+        echo "[check] selector_type=$selector_type"
+        echo "[check] selector_input=$selector_input"
+        echo "[check] all_matches=$all_matches"
+        echo "[check] matched_files=${#selected_media_paths[@]}"
+        for selected_path in "${selected_media_paths[@]}"; do
+            echo "[check] selected=${selected_path##*/}"
+        done
+    fi
+}
 
 ensure_preferred_audio_for_stem() {
     local stem="$1"
@@ -1046,6 +1058,41 @@ echo "  language=$language"
 echo "  output_format=$output_format"
 echo
 
+if (( check_only == 1 )); then
+    if (( selector_option_count == 1 )); then
+        for selected_path in "${selected_media_paths[@]}"; do
+            if is_supported_audio_file "$selected_path"; then
+                audio_found=$((audio_found + 1))
+            elif is_supported_video_file "$selected_path"; then
+                video_found=$((video_found + 1))
+            fi
+        done
+        would_process_count=${#selected_media_paths[@]}
+    else
+        while IFS= read -r -d '' audio_file; do
+            audio_found=$((audio_found + 1))
+        done < "$audio_scan_file"
+
+        while IFS= read -r -d '' video_file; do
+            video_found=$((video_found + 1))
+        done < "$video_scan_file"
+        would_process_count=$((audio_found + video_found))
+    fi
+
+    rm -f -- "$audio_scan_file" "$video_scan_file"
+
+    print_check_selection
+    echo "掃描結果："
+    echo "  找到音檔：$audio_found"
+    echo "  找到影片：$video_found"
+    echo "  待轉錄檔：$would_process_count"
+    echo
+    echo "--check 模式，不執行轉錄或抽音軌。"
+    exit 0
+fi
+
+mkdir -p "$transcript_dir"
+
 if (( selector_option_count == 1 )); then
     for selected_path in "${selected_media_paths[@]}"; do
         if is_supported_audio_file "$selected_path"; then
@@ -1083,11 +1130,6 @@ echo "  找到音檔：$audio_found"
 echo "  找到影片：$video_found"
 echo "  待轉錄檔：${#transcription_queue[@]}"
 echo
-
-if (( check_only == 1 )); then
-    echo "--check 模式，不執行轉錄。"
-    exit 0
-fi
 
 if (( ${#transcription_queue[@]} == 0 )); then
     if (( selector_option_count == 1 )); then
