@@ -1,6 +1,6 @@
 # SDD/CR：transcribe-audio 拆分與整合前置規格
 
-狀態：Proposed
+狀態：Completed
 日期：2026-06-21
 適用 repo：transcribe-audio
 
@@ -19,7 +19,7 @@ extract-audio
 transcribe-audio
   - transcription pipeline producer
   - 掃描音檔與影片檔
-  - 必要時自行抽音軌
+  - 必要時自行做轉錄前音軌處理
   - 使用 WhisperX 產生 raw transcript
 
 transcript-polish
@@ -52,7 +52,7 @@ Meeting/
 預期：
 
 - `a.mp4` 若已有 `a.m4a`，預設沿用既有音檔。
-- `b.mp4` 若沒有同 stem 音檔，才抽音軌。
+- `b.mp4` 若沒有同 stem 音檔，才做轉錄前音軌處理。
 - 逐字稿輸出到 `Meeting/transcript/`。
 
 ### 2.3 sidecar layout 暫不在本次拆分實作
@@ -70,11 +70,11 @@ Meeting.transcript/
 Meeting.meta/
 ```
 
-這件事應在 `transcribe-audio` 新 repo 內另開 CR，不再放在 `extract-audio` repo 內處理。
+這件事應在 `transcribe-audio` repo 內另開 CR，不再放在 `extract-audio` repo 內處理。
 
-## 3. 本次拆分範圍
+## 3. 本次拆分結果
 
-### 3.1 transcribe-audio repo 應保留
+### 3.1 transcribe-audio repo 保留
 
 ```text
 bin/transcribe-audio
@@ -85,13 +85,13 @@ docs/SDD-CR-integrated-pipeline-readiness.md
 docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md
 ```
 
-### 3.2 transcribe-audio repo 應移除
+### 3.2 transcribe-audio repo 已移除
 
 ```text
 bin/extract-audio
 ```
 
-README 與 INSTALL 不應再宣稱本 repo 提供 `extract-audio`。
+README 與 INSTALL 已改成只描述與安裝 `transcribe-audio`。
 
 ## 4. 後續可評估 CR
 
@@ -101,11 +101,9 @@ README 與 INSTALL 不應再宣稱本 repo 提供 `extract-audio`。
 2. 是否新增 `--transcript-output`、`--meta-output`。
 3. 是否將 `transcript-polish` 合併到同一 pipeline repo。
 4. 是否新增 `transcribe-and-polish` wrapper。
-5. 是否保留或調整內部抽音軌策略。
+5. 是否保留或調整內部音軌前處理策略。
 
-## 5. 驗收標準
-
-拆分完成後：
+## 5. 驗收狀態
 
 - `transcribe-audio` repo 的 README 只描述 `transcribe-audio`。
 - `transcribe-audio` repo 的 INSTALL 只安裝 `transcribe-audio`。
