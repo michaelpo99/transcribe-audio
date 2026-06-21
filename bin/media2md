@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+用法：
+  media2md [目錄]
+  media2md --check [目錄]
+  media2md --force [目錄]
+  media2md --diarize [目錄]
+  media2md --polish-mode standard|quality [目錄]
+
+說明：
+  串接 transcribe-audio 與 transcript-polish。
+  預設輸出到目標目錄下的 transcript/ 與 polished/。
+
+選項：
+  -f, --force              同時覆蓋 transcribe 與 polish 輸出
+  -d, --diarize            只影響 transcribe 階段
+      --check              只檢查工具與環境，不執行正式流程
+      --polish-mode MODE    傳遞給 transcript-polish 的 mode：standard|quality
+  -h, --help               顯示說明
+EOF
+}
+
+target_dir="."
+force=0
+check_only=0
+diarize=0
+polish_mode=""
+positional_count=0
+
+require_command() {
+    local command_name="$1"
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "錯誤：找不到 $command_name。" >&2
+        exit 1
+    fi
+}
+
+while (($# > 0)); do
+    case "$1" in
+        -f|--force)
+            force=1
+            ;;
+        -d|--diarize)
+            diarize=1
+            ;;
+        --check)
+            check_only=1
+            ;;
+        --polish-mode)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--polish-mode 需要值。" >&2; exit 2; }
+            polish_mode="$1"
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo "錯誤：未知選項：$1" >&2
+            usage >&2
+            exit 2
+            ;;
+        *)
+            positional_count=$((positional_count + 1))
+            if (( positional_count > 1 )); then
+                echo "錯誤：只能指定一個目錄。" >&2
+                exit 2
+            fi
+            target_dir="$1"
+            ;;
+    esac
+    shift
+done
+
+case "$polish_mode" in
+    ""|standard|quality) ;;
+    *)
+        echo "錯誤：--polish-mode 只接受 standard 或 quality。" >&2
+        exit 2
+        ;;
+esac
+
+if [[ ! -d "$target_dir" ]]; then
+    echo "錯誤：目錄不存在：$target_dir" >&2
+    exit 1
+fi
+
+require_command transcribe-audio
+require_command transcript-polish
+
+transcribe_cmd=(transcribe-audio)
+polish_cmd=(transcript-polish)
+
+if (( force == 1 )); then
+    transcribe_cmd+=(--force)
+    polish_cmd+=(--force)
+fi
+if (( diarize == 1 )); then
+    transcribe_cmd+=(--diarize)
+fi
+if [[ -n "$polish_mode" ]]; then
+    polish_cmd+=(--mode "$polish_mode")
+fi
+
+transcript_dir="$target_dir/transcript"
+polished_dir="$target_dir/polished"
+
+if (( check_only == 1 )); then
+    echo "[check] target_dir=$target_dir"
+    echo "[check] transcribe-audio=$(command -v transcribe-audio)"
+    echo "[check] transcript-polish=$(command -v transcript-polish)"
+    "${transcribe_cmd[@]}" --check "$target_dir"
+    if [[ -n "$polish_mode" ]]; then
+        "${polish_cmd[@]}" --check
+    else
+        transcript-polish --check
+    fi
+    echo "[check] OK"
+    exit 0
+fi
+
+"${transcribe_cmd[@]}" "$target_dir"
+"${polish_cmd[@]}" --dir "$transcript_dir" --output-dir "$polished_dir"
+
+echo "完成："
+echo "  transcript: $transcript_dir"
+echo "  polished:   $polished_dir"

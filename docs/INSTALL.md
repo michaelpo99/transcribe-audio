@@ -4,6 +4,7 @@
 
 ```text
 transcribe-audio
+media2md
 ```
 
 用途是掃描目錄中的音檔與影片檔，必要時先抽音軌，再用 WhisperX 批次轉文字。
@@ -99,6 +100,8 @@ bash install.sh --uninstall
 
 `install.sh` 不會自動修改 shell 設定檔。若安裝目錄不在 PATH，腳本會提示應加入的 `export PATH=...`。
 
+`media2md` 會再呼叫 `transcript-polish`，因此若要使用一鍵產出 Markdown 的流程，還需要先安裝 `transcript-polish` 並讓它可在 PATH 中被找到。
+
 ## 5. 直接執行
 
 不安裝也可以直接執行 repo 內腳本：
@@ -108,6 +111,10 @@ bash install.sh --uninstall
 ./bin/transcribe-audio --check
 ./bin/transcribe-audio "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
+./bin/media2md
+./bin/media2md --check
+./bin/media2md "/mnt/d/Videos/Meeting"
+./bin/media2md --polish-mode quality "/mnt/d/Videos/Meeting"
 ```
 
 ## 6. 手動安裝成全域指令
@@ -117,7 +124,9 @@ bash install.sh --uninstall
 ```bash
 mkdir -p ~/bin
 cp ./bin/transcribe-audio ~/bin/transcribe-audio
+cp ./bin/media2md ~/bin/media2md
 chmod +x ~/bin/transcribe-audio
+chmod +x ~/bin/media2md
 ```
 
 把 `~/bin` 加入 PATH：
@@ -139,6 +148,9 @@ source ~/.bashrc
 which transcribe-audio
 transcribe-audio --help
 transcribe-audio --check
+which media2md
+media2md --help
+media2md --check
 ```
 
 ## 7. 更新安裝
@@ -164,6 +176,8 @@ pip install --upgrade whisperx
 ```bash
 transcribe-audio --help
 transcribe-audio --check
+media2md --help
+media2md --check
 ```
 
 若要驗證 diarization：
@@ -180,6 +194,8 @@ transcribe-audio --check --diarize
 ```bash
 bash install.sh --uninstall
 ```
+
+這會同時移除 `transcribe-audio` 與 `media2md`。
 
 移除 WhisperX 虛擬環境：
 
