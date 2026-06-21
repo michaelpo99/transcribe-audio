@@ -6,6 +6,9 @@ usage() {
     cat <<'EOF'
 用法：
   media2md [目錄]
+  media2md --file INPUT [目錄]
+  media2md --glob PATTERN [目錄]
+  media2md --regex PATTERN [目錄]
   media2md --check [目錄]
   media2md --force [目錄]
   media2md --diarize [目錄]
@@ -18,8 +21,12 @@ usage() {
 選項：
   -f, --force              同時覆蓋 transcribe 與 polish 輸出
   -d, --diarize            只影響 transcribe 階段
+      --file INPUT         指定單一檔案或 stem 前綴 selector
+      --glob PATTERN       以 glob 比對 stem
+      --regex PATTERN      以 regular expression 比對 stem
+      --all-matches        允許 selector 同時處理多筆匹配
       --check              只檢查工具與環境，不執行正式流程
-      --polish-mode MODE    傳遞給 transcript-polish 的 mode：standard|quality
+      --polish-mode MODE   傳遞給 transcript-polish 的 mode：standard|quality
   -h, --help               顯示說明
 EOF
 }
@@ -30,6 +37,11 @@ check_only=0
 diarize=0
 polish_mode=""
 positional_count=0
+selector_type=""
+selector_input=""
+selector_option_count=0
+all_matches=0
+declare -a selected_media_paths=()
 
 require_command() {
     local command_name="$1"
@@ -46,12 +58,167 @@ resolve_local_command() {
         command -v "$command_name"
         return 0
     fi
-    if [[ -x "$local_path" ]]; then
+    if [[ -n "$local_path" && -x "$local_path" ]]; then
         printf '%s\n' "$local_path"
         return 0
     fi
     echo "錯誤：找不到 $command_name。" >&2
     exit 1
+}
+
+path_extension_lower() {
+    local path="$1"
+    local base ext
+    base="$(basename -- "$path")"
+    ext="${base##*.}"
+    if [[ "$base" == "$ext" ]]; then
+        echo ""
+        return 0
+    fi
+    echo "${ext,,}"
+}
+
+basename_stem() {
+    local path="$1"
+    local base
+    base="$(basename -- "$path")"
+    echo "${base%.*}"
+}
+
+is_supported_audio_file() {
+    local ext
+    ext="$(path_extension_lower "$1")"
+    case "$ext" in
+        m4a|mp3|wav|flac|aac|ogg|opus|wma|mka|ac3|eac3) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_supported_video_file() {
+    local ext
+    ext="$(path_extension_lower "$1")"
+    case "$ext" in
+        mp4|m4v|mkv|mov|avi|webm|wmv|flv|ts|mts|m2ts|mpg|mpeg|3gp|ogv|vob|mxf) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_supported_media_file() {
+    is_supported_audio_file "$1" || is_supported_video_file "$1"
+}
+
+stem_matches_selector() {
+    local stem="$1"
+    case "$selector_type" in
+        file)
+            [[ "$stem" == "$selector_input"* ]]
+            ;;
+        glob)
+            [[ "$stem" == $selector_input ]]
+            ;;
+        regex)
+            [[ "$stem" =~ $selector_input ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+print_selector_candidates_and_exit() {
+    local -n candidates_ref="$1"
+    local candidate
+    echo "錯誤：selector 匹配到多個 media files，請指定更精確的 selector，或使用 --all-matches。" >&2
+    for candidate in "${candidates_ref[@]}"; do
+        echo "  - ${candidate##*/}" >&2
+    done
+    exit 1
+}
+
+resolve_direct_file_target_dir() {
+    local file_path="$1"
+    local parent_dir provided_dir
+
+    parent_dir="$(cd -- "$(dirname -- "$file_path")" && pwd)"
+    if (( positional_count == 1 )); then
+        if [[ ! -d "$target_dir" ]]; then
+            echo "錯誤：目錄不存在：$target_dir" >&2
+            exit 1
+        fi
+        provided_dir="$(cd -- "$target_dir" && pwd)"
+        if [[ "$provided_dir" != "$parent_dir" ]]; then
+            echo "錯誤：提供的目錄與 --file 檔案所在目錄不一致。" >&2
+            exit 1
+        fi
+    fi
+    target_dir="$parent_dir"
+}
+
+resolve_selector_matches() {
+    local candidate_path stem direct_file
+    selected_media_paths=()
+
+    if [[ "$selector_type" == "file" && -f "$selector_input" ]]; then
+        direct_file="$(cd -- "$(dirname -- "$selector_input")" && pwd)/$(basename -- "$selector_input")"
+        if ! is_supported_media_file "$direct_file"; then
+            echo "錯誤：--file 指定的檔案不是支援的 media file：$selector_input" >&2
+            exit 1
+        fi
+        resolve_direct_file_target_dir "$direct_file"
+        selected_media_paths=("$direct_file")
+        return 0
+    fi
+
+    while IFS= read -r -d '' candidate_path; do
+        stem="$(basename_stem "$candidate_path")"
+        if stem_matches_selector "$stem"; then
+            selected_media_paths+=("$candidate_path")
+        fi
+    done < <(
+        find "$target_dir" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+                -iname '*.m4a'  -o \
+                -iname '*.mp3'  -o \
+                -iname '*.wav'  -o \
+                -iname '*.flac' -o \
+                -iname '*.aac'  -o \
+                -iname '*.ogg'  -o \
+                -iname '*.opus' -o \
+                -iname '*.wma'  -o \
+                -iname '*.mka'  -o \
+                -iname '*.ac3'  -o \
+                -iname '*.eac3' -o \
+                -iname '*.mp4'  -o \
+                -iname '*.m4v'  -o \
+                -iname '*.mkv'  -o \
+                -iname '*.mov'  -o \
+                -iname '*.avi'  -o \
+                -iname '*.webm' -o \
+                -iname '*.wmv'  -o \
+                -iname '*.flv'  -o \
+                -iname '*.ts'   -o \
+                -iname '*.mts'  -o \
+                -iname '*.m2ts' -o \
+                -iname '*.mpg'  -o \
+                -iname '*.mpeg' -o \
+                -iname '*.3gp'  -o \
+                -iname '*.ogv'  -o \
+                -iname '*.vob'  -o \
+                -iname '*.mxf' \
+            \) \
+            -print0 | sort -z
+    )
+
+    if (( ${#selected_media_paths[@]} == 0 )); then
+        echo "錯誤：selector 沒有匹配任何 media files。" >&2
+        exit 1
+    fi
+
+    if (( ${#selected_media_paths[@]} > 1 && all_matches == 0 )); then
+        print_selector_candidates_and_exit selected_media_paths
+    fi
 }
 
 while (($# > 0)); do
@@ -61,6 +228,30 @@ while (($# > 0)); do
             ;;
         -d|--diarize)
             diarize=1
+            ;;
+        --file)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--file 需要值。" >&2; exit 2; }
+            selector_type="file"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --glob)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--glob 需要值。" >&2; exit 2; }
+            selector_type="glob"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --regex)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--regex 需要值。" >&2; exit 2; }
+            selector_type="regex"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --all-matches)
+            all_matches=1
             ;;
         --check)
             check_only=1
@@ -99,9 +290,21 @@ case "$polish_mode" in
         ;;
 esac
 
+if (( selector_option_count > 1 )); then
+    echo "錯誤：--file、--glob、--regex 互斥。" >&2
+    exit 2
+fi
+
+if (( all_matches == 1 && selector_option_count == 0 )); then
+    echo "錯誤：--all-matches 只能搭配 --file、--glob 或 --regex。" >&2
+    exit 2
+fi
+
 if [[ ! -d "$target_dir" ]]; then
-    echo "錯誤：目錄不存在：$target_dir" >&2
-    exit 1
+    if [[ "$selector_type" != "file" || ! -f "$selector_input" ]]; then
+        echo "錯誤：目錄不存在：$target_dir" >&2
+        exit 1
+    fi
 fi
 
 require_command transcript-polish
@@ -110,10 +313,15 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 transcribe_audio_bin="$(resolve_local_command transcribe-audio "$script_dir/transcribe-audio")"
 transcript_polish_bin="$(resolve_local_command transcript-polish "")"
 
+if (( selector_option_count == 1 )); then
+    resolve_selector_matches
+fi
+
 target_dir="$(cd -- "$target_dir" && pwd)"
 
 transcribe_cmd=("$transcribe_audio_bin")
 polish_cmd=("$transcript_polish_bin")
+selector_args=()
 
 if (( force == 1 )); then
     transcribe_cmd+=(--force)
@@ -125,6 +333,12 @@ fi
 if [[ -n "$polish_mode" ]]; then
     polish_cmd+=(--mode "$polish_mode")
 fi
+if (( selector_option_count == 1 )); then
+    selector_args+=("--$selector_type" "$selector_input")
+    if (( all_matches == 1 )); then
+        selector_args+=("--all-matches")
+    fi
+fi
 
 transcript_dir="$target_dir/transcript"
 polished_dir="$target_dir/polished"
@@ -133,14 +347,32 @@ if (( check_only == 1 )); then
     echo "[check] target_dir=$target_dir"
     echo "[check] transcribe-audio=$transcribe_audio_bin"
     echo "[check] transcript-polish=$transcript_polish_bin"
-    "${transcribe_cmd[@]}" --check "$target_dir"
+    "${transcribe_cmd[@]}" "${selector_args[@]}" --check "$target_dir"
     "${polish_cmd[@]}" --check
     echo "[check] OK"
     exit 0
 fi
 
-"${transcribe_cmd[@]}" "$target_dir"
-"${polish_cmd[@]}" --dir "$transcript_dir" --output-dir "$polished_dir"
+"${transcribe_cmd[@]}" "${selector_args[@]}" "$target_dir"
+
+if (( selector_option_count == 1 )); then
+    declare -A polished_stems=()
+    for selected_path in "${selected_media_paths[@]}"; do
+        stem="$(basename_stem "$selected_path")"
+        if [[ -n "${polished_stems[$stem]:-}" ]]; then
+            continue
+        fi
+        polished_stems["$stem"]=1
+        transcript_file="$transcript_dir/$stem.txt"
+        if [[ ! -f "$transcript_file" ]]; then
+            echo "錯誤：未找到預期 transcript：$transcript_file" >&2
+            exit 1
+        fi
+        "${polish_cmd[@]}" --file "$transcript_file" --output-dir "$polished_dir"
+    done
+else
+    "${polish_cmd[@]}" --dir "$transcript_dir" --output-dir "$polished_dir"
+fi
 
 echo "完成："
 echo "  transcript: $transcript_dir"

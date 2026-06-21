@@ -1,6 +1,6 @@
 # SDD/CR-003：single-file and selector input support
 
-狀態：Proposed
+狀態：Completed
 日期：2026-06-21
 適用 repo：transcribe-audio
 

@@ -103,6 +103,7 @@ bash install.sh --uninstall
 `media2md` 會再呼叫 `transcript-polish`，因此若要使用一鍵產出 Markdown 的流程，還需要先安裝 `transcript-polish` 並讓它可在 PATH 中被找到。
 
 `transcribe-audio` 可用 `--transcript-dir` 改寫 raw transcript 輸出位置。
+`transcribe-audio` 與 `media2md` 也支援 `--file`、`--glob`、`--regex` 與 `--all-matches` 做單檔或 selector 輸入。
 
 ## 5. 直接執行
 
@@ -113,10 +114,18 @@ bash install.sh --uninstall
 ./bin/transcribe-audio --check
 ./bin/transcribe-audio "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
+./bin/transcribe-audio --file ./meeting/a.mp4
+./bin/transcribe-audio --file a ./meeting
+./bin/transcribe-audio --glob '會議*' ./meeting
+./bin/transcribe-audio --regex '^A00[1-5]' ./meeting
 ./bin/transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 ./bin/media2md
 ./bin/media2md --check
 ./bin/media2md "/mnt/d/Videos/Meeting"
+./bin/media2md --file ./meeting/a.mp4
+./bin/media2md --file a ./meeting
+./bin/media2md --glob '會議*' ./meeting
+./bin/media2md --regex '^A00[1-5]' ./meeting
 ./bin/media2md --polish-mode quality "/mnt/d/Videos/Meeting"
 ```
 
@@ -189,6 +198,13 @@ media2md --check
 export HF_TOKEN="你的 token"
 transcribe-audio --check --diarize
 ```
+
+selector 模式說明：
+
+- `--file` 會先嘗試把輸入視為實際檔案路徑；若檔案不存在，才改用 stem 前綴 selector。
+- `--glob` 與 `--regex` 都只比對 basename stem，不比對副檔名。
+- 多筆匹配預設失敗；要一次處理全部需加 `--all-matches`。
+- `media2md` 在 selector 模式只會 polish 這次選到的 transcript 檔。
 
 ## 9. 移除
 

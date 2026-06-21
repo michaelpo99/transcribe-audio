@@ -25,6 +25,7 @@
 - 預設只輸出 `txt`。
 - 預設輸出到目標目錄下的 `transcript/`。
 - 支援 `--transcript-dir` 自訂 raw transcript 輸出位置。
+- 支援 `--file`、`--glob`、`--regex` 與 `--all-matches` 做單檔或 selector 輸入。
 - 支援 `--diarize` 啟用說話者分離。
 - `media2md` 可串接 `transcribe-audio` 與 `transcript-polish`。
 - 執行前會檢查 WhisperX、Python、Torch、FFmpeg、CUDA 與 Hugging Face 權限。
@@ -92,10 +93,16 @@ bash install.sh
 
 ```bash
 transcribe-audio [目錄]
+transcribe-audio --file INPUT [目錄]
+transcribe-audio --glob PATTERN [目錄]
+transcribe-audio --regex PATTERN [目錄]
 transcribe-audio --check [目錄]
 transcribe-audio --force [目錄]
 transcribe-audio --diarize [目錄]
 media2md [目錄]
+media2md --file INPUT [目錄]
+media2md --glob PATTERN [目錄]
+media2md --regex PATTERN [目錄]
 media2md --check [目錄]
 media2md --force [目錄]
 media2md --diarize [目錄]
@@ -108,9 +115,17 @@ media2md --polish-mode standard|quality [目錄]
 ./bin/transcribe-audio
 ./bin/transcribe-audio "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --check "/mnt/d/Videos/Meeting"
+./bin/transcribe-audio --file ./meeting/a.mp4
+./bin/transcribe-audio --file a ./meeting
+./bin/transcribe-audio --glob '會議*' ./meeting
+./bin/transcribe-audio --regex '^A00[1-5]' ./meeting
 ./bin/transcribe-audio --force "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --diarize --min-speakers 2 --max-speakers 6 "/mnt/d/Videos/Meeting"
 ./bin/media2md "/mnt/d/Videos/Meeting"
+./bin/media2md --file ./meeting/a.mp4
+./bin/media2md --file a ./meeting
+./bin/media2md --glob '會議*' ./meeting
+./bin/media2md --regex '^A00[1-5]' ./meeting
 ./bin/media2md --check "/mnt/d/Videos/Meeting"
 ```
 
@@ -131,8 +146,12 @@ Meeting/
 ## 注意事項
 
 - 目前只掃描指定目錄第一層，不遞迴子目錄。
+- `--file` 會先嘗試把輸入視為實際檔案路徑；若檔案不存在，才改用 stem 前綴 selector。
+- `--glob` 與 `--regex` 都只比對 basename stem，不比對副檔名。
+- 多筆匹配預設失敗；要一次處理全部需加 `--all-matches`。
 - 影片只抽第一條音軌。
 - 若同名音檔或逐字稿輸出已存在且未指定 `--force`，會盡量沿用或跳過。
+- `media2md` 在 selector 模式只會 polish 這次選到的 transcript 檔，不會掃整個 `transcript/`。
 - 可用 `--transcript-dir` 將 raw transcript 改寫到其他位置。
 - 預設語言是 `zh`；若音訊不是中文，請明確指定 `--language`。
 - 使用 `--diarize` 前，需先確認 Hugging Face token 與 pyannote gated model 權限已可用。

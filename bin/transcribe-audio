@@ -6,6 +6,9 @@ usage() {
     cat <<'EOF'
 用法：
   transcribe-audio [目錄]
+  transcribe-audio --file INPUT [目錄]
+  transcribe-audio --glob PATTERN [目錄]
+  transcribe-audio --regex PATTERN [目錄]
   transcribe-audio --diarize [目錄]
   transcribe-audio --force [目錄]
   transcribe-audio --check [目錄]
@@ -19,6 +22,10 @@ usage() {
 選項：
   -d, --diarize                 啟用說話者分離
   -f, --force                   覆蓋既有音檔與逐字稿輸出
+      --file INPUT              指定單一檔案或 stem 前綴 selector
+      --glob PATTERN            以 glob 比對 stem
+      --regex PATTERN           以 regular expression 比對 stem
+      --all-matches             允許 selector 同時處理多筆匹配
       --check                   只檢查環境與推估參數，不執行轉錄
       --model NAME              指定模型，例如：small、medium、large-v3
       --device auto|cuda|cpu    指定裝置，預設 auto
@@ -35,6 +42,10 @@ usage() {
 範例：
   transcribe-audio
   transcribe-audio --check
+  transcribe-audio --file ./meeting/a.mp4
+  transcribe-audio --file a ./meeting
+  transcribe-audio --glob '會議*' ./meeting
+  transcribe-audio --regex '^A00[1-5]' ./meeting
   transcribe-audio --force "/mnt/d/Videos/Meeting"
   transcribe-audio --diarize --min-speakers 2 --max-speakers 6
   transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
@@ -56,6 +67,10 @@ transcript_dir_spec=""
 min_speakers=""
 max_speakers=""
 positional_count=0
+selector_type=""
+selector_input=""
+selector_option_count=0
+all_matches=0
 
 while (($# > 0)); do
     case "$1" in
@@ -64,6 +79,30 @@ while (($# > 0)); do
             ;;
         -f|--force)
             force=1
+            ;;
+        --file)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--file 需要值。" >&2; exit 2; }
+            selector_type="file"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --glob)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--glob 需要值。" >&2; exit 2; }
+            selector_type="glob"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --regex)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--regex 需要值。" >&2; exit 2; }
+            selector_type="regex"
+            selector_input="$1"
+            selector_option_count=$((selector_option_count + 1))
+            ;;
+        --all-matches)
+            all_matches=1
             ;;
         --check)
             check_only=1
@@ -166,9 +205,21 @@ if [[ -n "$min_speakers" || -n "$max_speakers" ]] && (( diarize == 0 )); then
     exit 2
 fi
 
+if (( selector_option_count > 1 )); then
+    echo "錯誤：--file、--glob、--regex 互斥。" >&2
+    exit 2
+fi
+
+if (( all_matches == 1 && selector_option_count == 0 )); then
+    echo "錯誤：--all-matches 只能搭配 --file、--glob 或 --regex。" >&2
+    exit 2
+fi
+
 if [[ ! -d "$target_dir" ]]; then
-    echo "錯誤：目錄不存在：$target_dir" >&2
-    exit 1
+    if [[ "$selector_type" != "file" || ! -f "$selector_input" ]]; then
+        echo "錯誤：目錄不存在：$target_dir" >&2
+        exit 1
+    fi
 fi
 
 for command_name in bash ffmpeg ffprobe find sort awk stat; do
@@ -552,6 +603,168 @@ primary_output_extension() {
     esac
 }
 
+path_extension_lower() {
+    local path="$1"
+    local base ext
+    base="$(basename -- "$path")"
+    ext="${base##*.}"
+    if [[ "$base" == "$ext" ]]; then
+        echo ""
+        return 0
+    fi
+    echo "${ext,,}"
+}
+
+basename_stem() {
+    local path="$1"
+    local base
+    base="$(basename -- "$path")"
+    echo "${base%.*}"
+}
+
+is_supported_audio_file() {
+    local ext
+    ext="$(path_extension_lower "$1")"
+    case "$ext" in
+        m4a|mp3|wav|flac|aac|ogg|opus|wma|mka|ac3|eac3) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_supported_video_file() {
+    local ext
+    ext="$(path_extension_lower "$1")"
+    case "$ext" in
+        mp4|m4v|mkv|mov|avi|webm|wmv|flv|ts|mts|m2ts|mpg|mpeg|3gp|ogv|vob|mxf) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_supported_media_file() {
+    is_supported_audio_file "$1" || is_supported_video_file "$1"
+}
+
+stem_matches_selector() {
+    local stem="$1"
+    case "$selector_type" in
+        file)
+            [[ "$stem" == "$selector_input"* ]]
+            ;;
+        glob)
+            [[ "$stem" == $selector_input ]]
+            ;;
+        regex)
+            [[ "$stem" =~ $selector_input ]]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+print_selector_candidates_and_exit() {
+    local -n candidates_ref="$1"
+    local candidate
+    echo "錯誤：selector 匹配到多個 media files，請指定更精確的 selector，或使用 --all-matches。" >&2
+    for candidate in "${candidates_ref[@]}"; do
+        echo "  - ${candidate##*/}" >&2
+    done
+    exit 1
+}
+
+resolve_direct_file_target_dir() {
+    local file_path="$1"
+    local parent_dir provided_dir
+
+    parent_dir="$(cd -- "$(dirname -- "$file_path")" && pwd)"
+    if (( positional_count == 1 )); then
+        if [[ ! -d "$target_dir" ]]; then
+            echo "錯誤：目錄不存在：$target_dir" >&2
+            exit 1
+        fi
+        provided_dir="$(cd -- "$target_dir" && pwd)"
+        if [[ "$provided_dir" != "$parent_dir" ]]; then
+            echo "錯誤：提供的目錄與 --file 檔案所在目錄不一致。" >&2
+            exit 1
+        fi
+    fi
+    target_dir="$parent_dir"
+}
+
+declare -a selected_media_paths=()
+selected_direct_file=""
+
+resolve_selector_matches() {
+    local candidate_path stem
+    selected_media_paths=()
+
+    if [[ "$selector_type" == "file" && -f "$selector_input" ]]; then
+        selected_direct_file="$(cd -- "$(dirname -- "$selector_input")" && pwd)/$(basename -- "$selector_input")"
+        if ! is_supported_media_file "$selected_direct_file"; then
+            echo "錯誤：--file 指定的檔案不是支援的 media file：$selector_input" >&2
+            exit 1
+        fi
+        resolve_direct_file_target_dir "$selected_direct_file"
+        selected_media_paths=("$selected_direct_file")
+        return 0
+    fi
+
+    while IFS= read -r -d '' candidate_path; do
+        stem="$(basename_stem "$candidate_path")"
+        if stem_matches_selector "$stem"; then
+            selected_media_paths+=("$candidate_path")
+        fi
+    done < <(
+        find "$target_dir" \
+            -maxdepth 1 \
+            -type f \
+            \( \
+                -iname '*.m4a'  -o \
+                -iname '*.mp3'  -o \
+                -iname '*.wav'  -o \
+                -iname '*.flac' -o \
+                -iname '*.aac'  -o \
+                -iname '*.ogg'  -o \
+                -iname '*.opus' -o \
+                -iname '*.wma'  -o \
+                -iname '*.mka'  -o \
+                -iname '*.ac3'  -o \
+                -iname '*.eac3' -o \
+                -iname '*.mp4'  -o \
+                -iname '*.m4v'  -o \
+                -iname '*.mkv'  -o \
+                -iname '*.mov'  -o \
+                -iname '*.avi'  -o \
+                -iname '*.webm' -o \
+                -iname '*.wmv'  -o \
+                -iname '*.flv'  -o \
+                -iname '*.ts'   -o \
+                -iname '*.mts'  -o \
+                -iname '*.m2ts' -o \
+                -iname '*.mpg'  -o \
+                -iname '*.mpeg' -o \
+                -iname '*.3gp'  -o \
+                -iname '*.ogv'  -o \
+                -iname '*.vob'  -o \
+                -iname '*.mxf' \
+            \) \
+            -print0 | sort -z
+    )
+
+    if (( ${#selected_media_paths[@]} == 0 )); then
+        echo "錯誤：selector 沒有匹配任何 media files。" >&2
+        exit 1
+    fi
+
+    if (( ${#selected_media_paths[@]} > 1 && all_matches == 0 )); then
+        print_selector_candidates_and_exit selected_media_paths
+    fi
+}
+
+if (( selector_option_count == 1 )); then
+    resolve_selector_matches
+fi
+
 target_dir="$(cd "$target_dir" && pwd)"
 if [[ -n "$transcript_dir_spec" ]]; then
     case "$transcript_dir_spec" in
@@ -612,13 +825,6 @@ declare -A preferred_audio_by_stem=()
 declare -A queued_audio_paths=()
 declare -A queued_transcript_stems=()
 
-while IFS= read -r -d '' audio_file; do
-    stem="$(basename "${audio_file%.*}")"
-    if [[ -z "${preferred_audio_by_stem[$stem]:-}" ]]; then
-        preferred_audio_by_stem["$stem"]="$audio_file"
-    fi
-done < "$audio_scan_file"
-
 declare -a transcription_queue=()
 declare -a failed_items=()
 declare -A queued_media_duration_ms=()
@@ -640,6 +846,34 @@ attempted_duration_ms=0
 attempted_size_bytes=0
 skipped_duration_ms=0
 skipped_size_bytes=0
+
+ensure_preferred_audio_for_stem() {
+    local stem="$1"
+    local candidate
+
+    if [[ -n "${preferred_audio_by_stem[$stem]:-}" ]]; then
+        return 0
+    fi
+
+    for candidate in \
+        "$target_dir/$stem.m4a" \
+        "$target_dir/$stem.mp3" \
+        "$target_dir/$stem.wav" \
+        "$target_dir/$stem.flac" \
+        "$target_dir/$stem.aac" \
+        "$target_dir/$stem.ogg" \
+        "$target_dir/$stem.opus" \
+        "$target_dir/$stem.wma" \
+        "$target_dir/$stem.mka" \
+        "$target_dir/$stem.ac3" \
+        "$target_dir/$stem.eac3"; do
+        if [[ -f "$candidate" ]]; then
+            preferred_audio_by_stem["$stem"]="$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
 
 enqueue_audio_for_transcription() {
     local audio_path="$1"
@@ -668,6 +902,7 @@ extract_audio_from_video() {
     local stem codec extension output_file temp_file fallback_file fallback_temp
 
     stem="$(basename "${video_file%.*}")"
+    ensure_preferred_audio_for_stem "$stem" || true
 
     if [[ -n "${preferred_audio_by_stem[$stem]:-}" && "$force" -eq 0 ]]; then
         if validate_audio "${preferred_audio_by_stem[$stem]}"; then
@@ -780,7 +1015,11 @@ extract_audio_from_video() {
 
 echo "來源目錄：$target_dir"
 echo "輸出目錄：$transcript_dir"
-echo "模式：批次轉錄"
+if (( selector_option_count == 1 )); then
+    echo "模式：selector"
+else
+    echo "模式：批次轉錄"
+fi
 echo "說話者分離：$([[ "$diarize" -eq 1 ]] && echo '開啟' || echo '關閉')"
 echo
 echo "[檢查] whisperx：OK (${whisperx_version:-unknown})"
@@ -807,15 +1046,35 @@ echo "  language=$language"
 echo "  output_format=$output_format"
 echo
 
-while IFS= read -r -d '' audio_file; do
-    audio_found=$((audio_found + 1))
-    enqueue_audio_for_transcription "$audio_file" || true
-done < "$audio_scan_file"
+if (( selector_option_count == 1 )); then
+    for selected_path in "${selected_media_paths[@]}"; do
+        if is_supported_audio_file "$selected_path"; then
+            audio_found=$((audio_found + 1))
+            stem="$(basename_stem "$selected_path")"
+            if [[ -z "${preferred_audio_by_stem[$stem]:-}" ]]; then
+                preferred_audio_by_stem["$stem"]="$selected_path"
+            fi
+            enqueue_audio_for_transcription "$selected_path" || true
+        elif is_supported_video_file "$selected_path"; then
+            video_found=$((video_found + 1))
+            extract_audio_from_video "$selected_path" || true
+        fi
+    done
+else
+    while IFS= read -r -d '' audio_file; do
+        audio_found=$((audio_found + 1))
+        stem="$(basename_stem "$audio_file")"
+        if [[ -z "${preferred_audio_by_stem[$stem]:-}" ]]; then
+            preferred_audio_by_stem["$stem"]="$audio_file"
+        fi
+        enqueue_audio_for_transcription "$audio_file" || true
+    done < "$audio_scan_file"
 
-while IFS= read -r -d '' video_file; do
-    video_found=$((video_found + 1))
-    extract_audio_from_video "$video_file" || true
-done < "$video_scan_file"
+    while IFS= read -r -d '' video_file; do
+        video_found=$((video_found + 1))
+        extract_audio_from_video "$video_file" || true
+    done < "$video_scan_file"
+fi
 
 rm -f -- "$audio_scan_file" "$video_scan_file"
 
@@ -831,6 +1090,10 @@ if (( check_only == 1 )); then
 fi
 
 if (( ${#transcription_queue[@]} == 0 )); then
+    if (( selector_option_count == 1 )); then
+        echo "錯誤：selector 沒有產生可轉錄的檔案。" >&2
+        exit 1
+    fi
     echo "沒有找到可轉錄的音檔。"
     exit 0
 fi
@@ -865,6 +1128,9 @@ failed_file="$transcript_dir/_failed-files.txt"
     echo "language=$language"
     echo "output_format=$output_format"
     echo "diarize=$diarize"
+    echo "selector_type=${selector_type:-none}"
+    echo "selector_input=${selector_input:-none}"
+    echo "all_matches=$all_matches"
 } > "$env_file"
 
 if [[ -e "$failed_file" ]]; then
@@ -1013,6 +1279,9 @@ processing_speed_x="$(format_ratio "$attempted_duration_ms" "$run_duration_ms")"
     echo "language=$language"
     echo "output_format=$output_format"
     echo "diarize=$diarize"
+    echo "selector_type=${selector_type:-none}"
+    echo "selector_input=${selector_input:-none}"
+    echo "all_matches=$all_matches"
 } > "$summary_file"
 
 echo
