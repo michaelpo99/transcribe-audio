@@ -1,0 +1,24 @@
+來源目錄：/home/michaelpo/extract-audio
+輸出目錄：/home/michaelpo/extract-audio/transcript
+模式：批次轉錄
+說話者分離：關閉
+
+[檢查] whisperx：OK (3.8.6)
+[檢查] python：OK (3.12.3)
+[檢查] torch：OK (2.8.0+cu128)
+[檢查] CUDA：OK (NVIDIA GeForce RTX 3080, 10239MB, runtime 12.8)
+
+最終參數：
+  device=cuda
+  model=large-v3
+  compute_type=float16
+  batch_size=8
+  language=zh
+  output_format=txt
+
+掃描結果：
+  找到音檔：0
+  找到影片：0
+  待轉錄檔：0
+
+--check 模式，不執行轉錄。
