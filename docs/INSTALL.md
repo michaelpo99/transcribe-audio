@@ -59,15 +59,49 @@ pip install whisperx
 2. 可讀取 `pyannote/speaker-diarization-community-1` 的權限。
 3. 可用的 `HF_TOKEN`，或已登入 Hugging Face CLI。
 
-## 4. 直接執行
+## 4. 使用 install.sh 安裝 CLI
 
-先給執行權限：
+預設安裝到：
 
-```bash
-chmod +x ./bin/transcribe-audio
+```text
+~/bin/transcribe-audio
 ```
 
-直接使用：
+執行：
+
+```bash
+bash install.sh
+```
+
+檢查安裝與依賴：
+
+```bash
+bash install.sh --check
+```
+
+指定安裝目錄：
+
+```bash
+bash install.sh --bin-dir "$HOME/.local/bin"
+```
+
+指定 prefix，會安裝到 `PREFIX/bin`：
+
+```bash
+sudo bash install.sh --prefix /usr/local
+```
+
+移除全域指令：
+
+```bash
+bash install.sh --uninstall
+```
+
+`install.sh` 不會自動修改 shell 設定檔。若安裝目錄不在 PATH，腳本會提示應加入的 `export PATH=...`。
+
+## 5. 直接執行
+
+不安裝也可以直接執行 repo 內腳本：
 
 ```bash
 ./bin/transcribe-audio
@@ -76,9 +110,9 @@ chmod +x ./bin/transcribe-audio
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
 ```
 
-## 5. 安裝成全域指令
+## 6. 手動安裝成全域指令
 
-建立個人 `bin` 目錄並複製腳本：
+若不使用 `install.sh`，也可以手動複製：
 
 ```bash
 mkdir -p ~/bin
@@ -107,14 +141,13 @@ transcribe-audio --help
 transcribe-audio --check
 ```
 
-## 6. 更新安裝
+## 7. 更新安裝
 
 若腳本有新版本：
 
 ```bash
-cd ~/transcribe-audio
-cp ./bin/transcribe-audio ~/bin/transcribe-audio
-chmod +x ~/bin/transcribe-audio
+git pull
+bash install.sh
 ```
 
 若 WhisperX 環境也有更新需求：
@@ -124,7 +157,7 @@ source "$HOME/.venvs/whisperx/bin/activate"
 pip install --upgrade whisperx
 ```
 
-## 7. 驗證
+## 8. 驗證
 
 最小驗證：
 
@@ -140,12 +173,12 @@ export HF_TOKEN="你的 token"
 transcribe-audio --check --diarize
 ```
 
-## 8. 移除
+## 9. 移除
 
 只移除全域指令：
 
 ```bash
-rm -f ~/bin/transcribe-audio
+bash install.sh --uninstall
 ```
 
 移除 WhisperX 虛擬環境：
