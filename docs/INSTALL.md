@@ -102,6 +102,8 @@ bash install.sh --uninstall
 
 `media2md` 會再呼叫 `transcript-polish`，因此若要使用一鍵產出 Markdown 的流程，還需要先安裝 `transcript-polish` 並讓它可在 PATH 中被找到。
 
+`transcribe-audio` 可用 `--transcript-dir` 改寫 raw transcript 輸出位置。
+
 ## 5. 直接執行
 
 不安裝也可以直接執行 repo 內腳本：
@@ -111,6 +113,7 @@ bash install.sh --uninstall
 ./bin/transcribe-audio --check
 ./bin/transcribe-audio "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
+./bin/transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 ./bin/media2md
 ./bin/media2md --check
 ./bin/media2md "/mnt/d/Videos/Meeting"

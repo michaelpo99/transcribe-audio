@@ -24,6 +24,7 @@
 - 預設語言為 `zh`。
 - 預設只輸出 `txt`。
 - 預設輸出到目標目錄下的 `transcript/`。
+- 支援 `--transcript-dir` 自訂 raw transcript 輸出位置。
 - 支援 `--diarize` 啟用說話者分離。
 - `media2md` 可串接 `transcribe-audio` 與 `transcript-polish`。
 - 執行前會檢查 WhisperX、Python、Torch、FFmpeg、CUDA 與 Hugging Face 權限。
@@ -80,6 +81,7 @@ bash install.sh
 ./bin/transcribe-audio --check
 ./bin/transcribe-audio "/mnt/d/Videos/Meeting"
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
+./bin/transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 ```
 
 若想指定安裝位置，請看 [docs/INSTALL.md](docs/INSTALL.md)。
@@ -131,6 +133,7 @@ Meeting/
 - 目前只掃描指定目錄第一層，不遞迴子目錄。
 - 影片只抽第一條音軌。
 - 若同名音檔或逐字稿輸出已存在且未指定 `--force`，會盡量沿用或跳過。
+- 可用 `--transcript-dir` 將 raw transcript 改寫到其他位置。
 - 預設語言是 `zh`；若音訊不是中文，請明確指定 `--language`。
 - 使用 `--diarize` 前，需先確認 Hugging Face token 與 pyannote gated model 權限已可用。
 - `transcript/` 與本地測試目錄不應提交到 Git。

@@ -1,6 +1,6 @@
 # SDD/CR-002：media2md pipeline wrapper
 
-狀態：Partially Completed
+狀態：Completed
 日期：2026-06-21
 適用 repo：transcribe-audio
 
@@ -296,5 +296,4 @@ transcribe-audio ./meeting
 
 ## 8. Remaining items
 
-- `transcribe-audio --transcript-dir` 尚未實作。
-- 其他更細的 wrapper 拆分參數（例如 `--force-transcribe`、`--force-polish`、`--skip-transcribe`、`--skip-polish`）尚未實作。
+- 其他更細的 wrapper 拆分參數（例如 `--force-transcribe`、`--force-polish`、`--skip-transcribe`、`--skip-polish`）可視後續需要再評估。

@@ -9,6 +9,7 @@ usage() {
   transcribe-audio --diarize [目錄]
   transcribe-audio --force [目錄]
   transcribe-audio --check [目錄]
+  transcribe-audio --transcript-dir DIR [目錄]
 
 說明：
   掃描指定目錄第一層的音檔與影片檔。
@@ -25,6 +26,7 @@ usage() {
       --compute-type TYPE       指定 compute type：default|float16|float32|int8
       --language CODE           指定語言，預設 zh
       --output-format FORMAT    指定輸出格式，預設 txt
+      --transcript-dir DIR    指定 transcript 輸出目錄，預設 transcript
       --min-speakers N          diarize 時設定最小講者數
       --max-speakers N          diarize 時設定最大講者數
       --verbose                 顯示詳細資訊
@@ -35,6 +37,7 @@ usage() {
   transcribe-audio --check
   transcribe-audio --force "/mnt/d/Videos/Meeting"
   transcribe-audio --diarize --min-speakers 2 --max-speakers 6
+  transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 EOF
 }
 
@@ -49,6 +52,7 @@ output_format="txt"
 model=""
 batch_size=""
 compute_type=""
+transcript_dir_spec=""
 min_speakers=""
 max_speakers=""
 positional_count=0
@@ -93,6 +97,11 @@ while (($# > 0)); do
             shift
             [[ $# -gt 0 ]] || { echo "錯誤：--output-format 需要值。" >&2; exit 2; }
             output_format="$1"
+            ;;
+        --transcript-dir)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--transcript-dir 需要值。" >&2; exit 2; }
+            transcript_dir_spec="$1"
             ;;
         --min-speakers)
             shift
@@ -544,7 +553,14 @@ primary_output_extension() {
 }
 
 target_dir="$(cd "$target_dir" && pwd)"
-transcript_dir="$target_dir/transcript"
+if [[ -n "$transcript_dir_spec" ]]; then
+    case "$transcript_dir_spec" in
+        /*) transcript_dir="$transcript_dir_spec" ;;
+        *) transcript_dir="$target_dir/$transcript_dir_spec" ;;
+    esac
+else
+    transcript_dir="$target_dir/transcript"
+fi
 mkdir -p "$transcript_dir"
 
 audio_scan_file="$(mktemp)"
