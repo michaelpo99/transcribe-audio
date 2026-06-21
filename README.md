@@ -31,6 +31,7 @@
 transcribe-audio/
 ├── .gitignore
 ├── README.md
+├── install.sh
 ├── bin/
 │   └── transcribe-audio
 └── docs/
@@ -59,7 +60,13 @@ python -m pip install --upgrade pip setuptools wheel
 pip install whisperx
 ```
 
-直接執行專案內腳本：
+安裝 CLI：
+
+```bash
+bash install.sh
+```
+
+直接執行專案內腳本也可以：
 
 ```bash
 ./bin/transcribe-audio
@@ -68,7 +75,7 @@ pip install whisperx
 ./bin/transcribe-audio --diarize "/mnt/d/Videos/Meeting"
 ```
 
-若想安裝成全域指令，請看 [docs/INSTALL.md](docs/INSTALL.md)。
+若想指定安裝位置，請看 [docs/INSTALL.md](docs/INSTALL.md)。
 
 ## 用法
 
