@@ -8,8 +8,10 @@
 
 - 安裝說明：[docs/INSTALL.md](docs/INSTALL.md)
 - 需求規格：[docs/SDD-whisperx-batch-transcribe.md](docs/SDD-whisperx-batch-transcribe.md)
-- 拆分與整合前置 CR：[docs/SDD-CR-integrated-pipeline-readiness.md](docs/SDD-CR-integrated-pipeline-readiness.md)
+- 拆分與整合前置 CR：[docs/SDD-CR-001-integrated-pipeline-readiness.md](docs/SDD-CR-001-integrated-pipeline-readiness.md)
 - 實測筆記：[docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md](<docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md>)
+- CR 文件命名規則：`docs/SDD-CR-###-<slug>.md`，同一 repo 內依建立順序遞增編號。
+- Bug fix 文件命名規則：`docs/SDD-BUGFIX-###-<slug>.md`，同一 repo 內依建立順序遞增編號。
 
 ## 功能
 
@@ -37,7 +39,7 @@ transcribe-audio/
 └── docs/
     ├── INSTALL.md
     ├── SDD-whisperx-batch-transcribe.md
-    ├── SDD-CR-integrated-pipeline-readiness.md
+    ├── SDD-CR-001-integrated-pipeline-readiness.md
     └── notes/
         └── WhisperX 在 WSL2 的安裝與使用筆記.md
 ```

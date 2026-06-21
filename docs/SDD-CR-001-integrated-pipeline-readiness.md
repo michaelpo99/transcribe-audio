@@ -1,4 +1,4 @@
-# SDD/CR：transcribe-audio 拆分與整合前置規格
+# SDD/CR-001：transcribe-audio 拆分與整合前置規格
 
 狀態：Completed
 日期：2026-06-21
@@ -81,7 +81,7 @@ bin/transcribe-audio
 README.md
 docs/INSTALL.md
 docs/SDD-whisperx-batch-transcribe.md
-docs/SDD-CR-integrated-pipeline-readiness.md
+docs/SDD-CR-001-integrated-pipeline-readiness.md
 docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md
 ```
 
