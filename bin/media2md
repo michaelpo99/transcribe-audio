@@ -131,14 +131,10 @@ polished_dir="$target_dir/polished"
 
 if (( check_only == 1 )); then
     echo "[check] target_dir=$target_dir"
-    echo "[check] transcribe-audio=$(command -v transcribe-audio)"
-    echo "[check] transcript-polish=$(command -v transcript-polish)"
+    echo "[check] transcribe-audio=$transcribe_audio_bin"
+    echo "[check] transcript-polish=$transcript_polish_bin"
     "${transcribe_cmd[@]}" --check "$target_dir"
-    if [[ -n "$polish_mode" ]]; then
-        "${polish_cmd[@]}" --check
-    else
-        transcript-polish --check
-    fi
+    "${polish_cmd[@]}" --check
     echo "[check] OK"
     exit 0
 fi

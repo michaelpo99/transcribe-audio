@@ -214,7 +214,10 @@ media2md --polish-mode quality ./meeting
 對應呼叫：
 
 ```bash
-transcript-polish --mode standard --dir ./meeting/transcript --output-dir ./meeting/polished
+transcript-polish \
+  --mode standard \
+  --dir "$(pwd)/meeting/transcript" \
+  --output-dir "$(pwd)/meeting/polished"
 ```
 
 若未指定，交給 `transcript-polish` 自己的預設設定。
