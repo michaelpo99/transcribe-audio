@@ -94,11 +94,13 @@ media2md --diarize [目錄]
 它應做的事：
 
 1. 驗證目標目錄存在。
-2. 檢查 `transcribe-audio` 可用。
+2. 檢查 `transcribe-audio` 可用；若 PATH 找不到，應優先嘗試 `media2md` 同目錄下的 `transcribe-audio`。
 3. 檢查 `transcript-polish` 可用。
 4. 執行 `transcribe-audio`，產生 raw transcript。
 5. 執行 `transcript-polish --dir <meeting/transcript> --output-dir <meeting/polished>`。
 6. 顯示最後產物位置。
+
+在呼叫下游工具前，`target_dir` 應先轉成絕對路徑，避免 relative path 造成輸出巢狀。
 
 ### 4.2 `install.sh` 應同時安裝 `media2md`
 
