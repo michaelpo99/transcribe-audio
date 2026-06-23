@@ -32,6 +32,8 @@ usage() {
       --batch-size N            指定 batch size
       --compute-type TYPE       指定 compute type：default|float16|float32|int8
       --language CODE           指定語言，預設 zh
+                                常見代碼例如：zh、ja、en、ko、fr、de、es
+                                以 Whisper / ISO 639-1 語言碼為準；jp 會自動轉成 ja
       --output-format FORMAT    指定輸出格式，預設 txt
       --transcript-dir DIR    指定 transcript 輸出目錄，預設 transcript
       --min-speakers N          diarize 時設定最小講者數
@@ -204,6 +206,13 @@ if [[ -n "$min_speakers" || -n "$max_speakers" ]] && (( diarize == 0 )); then
     echo "錯誤：--min-speakers / --max-speakers 只能搭配 --diarize。" >&2
     exit 2
 fi
+
+case "$language" in
+    jp|jpn)
+        echo "警告：--language '$language' 不是 Whisper 常用語言碼，已自動改成 'ja'。" >&2
+        language="ja"
+        ;;
+esac
 
 if (( selector_option_count > 1 )); then
     echo "錯誤：--file、--glob、--regex 互斥。" >&2

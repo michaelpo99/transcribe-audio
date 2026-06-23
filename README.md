@@ -154,6 +154,7 @@ Meeting/
 - `media2md` 在 selector 模式只會 polish 這次選到的 transcript 檔，不會掃整個 `transcript/`。
 - 可用 `--transcript-dir` 將 raw transcript 改寫到其他位置。
 - 預設語言是 `zh`；若音訊不是中文，請明確指定 `--language`。
+- `--language` 使用 Whisper / ISO 639-1 語言碼，例如 `zh`、`ja`、`en`、`ko`；`jp` 會自動轉成 `ja`。
 - 使用 `--diarize` 前，需先確認 Hugging Face token 與 pyannote gated model 權限已可用。
 - `transcript/` 與本地測試目錄不應提交到 Git。
 - `media2md` 的 `--check` 不會執行正式轉錄或 polish。
