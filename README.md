@@ -11,6 +11,9 @@
 - 需求規格：[docs/SDD-whisperx-batch-transcribe.md](docs/SDD-whisperx-batch-transcribe.md)
 - 拆分與整合前置 CR：[docs/SDD-CR-001-integrated-pipeline-readiness.md](docs/SDD-CR-001-integrated-pipeline-readiness.md)
 - media2md pipeline CR：[docs/SDD-CR-002-media2md-pipeline.md](docs/SDD-CR-002-media2md-pipeline.md)
+- single-file 與 selector CR：[docs/SDD-CR-003-single-file-selector-input.md](docs/SDD-CR-003-single-file-selector-input.md)
+- 詞級時間字幕後處理 CR：[docs/SDD-CR-004-word-timed-srt-postprocessing.md](docs/SDD-CR-004-word-timed-srt-postprocessing.md)
+- Python 字幕後處理架構：[docs/SDD-ARCH-python-subtitle-postprocessing.md](docs/SDD-ARCH-python-subtitle-postprocessing.md)
 - 實測筆記：[docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md](<docs/notes/WhisperX 在 WSL2 的安裝與使用筆記.md>)
 - CR 文件命名規則：`docs/SDD-CR-###-<slug>.md`，同一 repo 內依建立順序遞增編號。
 - Bug fix 文件命名規則：`docs/SDD-BUGFIX-###-<slug>.md`，同一 repo 內依建立順序遞增編號。
@@ -23,6 +26,9 @@
 - 若影片已有同 stem 的可用音檔，預設沿用既有音檔，不重新抽取。
 - 預設語言為 `zh`。
 - 預設只輸出 `txt`。
+- SRT 輸出預設依 WhisperX 詞級時間重切，並保留原始 WhisperX SRT。
+- 支援 `--subtitle-postprocess off|split|clean` 控制字幕後處理。
+- `clean` 模式可選用外部 `srt-clean` 清除重複與已知 ASR 幻覺。
 - 預設輸出到目標目錄下的 `transcript/`。
 - 支援 `--transcript-dir` 自訂 raw transcript 輸出位置。
 - 支援 `--file`、`--glob`、`--regex` 與 `--all-matches` 做單檔或 selector 輸入。
@@ -37,16 +43,25 @@
 ```text
 transcribe-audio/
 ├── .gitignore
+├── AGENTS.md
 ├── README.md
+├── pyproject.toml
 ├── install.sh
 ├── bin/
 │   ├── transcribe-audio
-│   └── media2md
+│   ├── media2md
+│   └── transcribe-audio-subtitle
+├── src/
+│   └── transcribe_audio/
+├── tests/
 └── docs/
     ├── INSTALL.md
     ├── SDD-whisperx-batch-transcribe.md
     ├── SDD-CR-001-integrated-pipeline-readiness.md
     ├── SDD-CR-002-media2md-pipeline.md
+    ├── SDD-CR-003-single-file-selector-input.md
+    ├── SDD-CR-004-word-timed-srt-postprocessing.md
+    ├── SDD-ARCH-python-subtitle-postprocessing.md
     └── notes/
         └── WhisperX 在 WSL2 的安裝與使用筆記.md
 ```
@@ -99,6 +114,7 @@ transcribe-audio --regex PATTERN [目錄]
 transcribe-audio --check [目錄]
 transcribe-audio --force [目錄]
 transcribe-audio --diarize [目錄]
+transcribe-audio --output-format srt --subtitle-postprocess off|split|clean [目錄]
 media2md [目錄]
 media2md --file INPUT [目錄]
 media2md --glob PATTERN [目錄]
@@ -120,6 +136,9 @@ media2md --polish-mode standard|quality [目錄]
 ./bin/transcribe-audio --glob '會議*' ./meeting
 ./bin/transcribe-audio --regex '^A00[1-5]' ./meeting
 ./bin/transcribe-audio --force "/mnt/d/Videos/Meeting"
+./bin/transcribe-audio --language ja --output-format srt ./meeting
+./bin/transcribe-audio --output-format srt --subtitle-postprocess split ./meeting
+./bin/transcribe-audio --output-format srt --subtitle-postprocess off ./meeting
 ./bin/transcribe-audio --diarize --min-speakers 2 --max-speakers 6 "/mnt/d/Videos/Meeting"
 ./bin/media2md "/mnt/d/Videos/Meeting"
 ./bin/media2md --file ./meeting/a.mp4
@@ -138,10 +157,15 @@ Meeting/
 ├── meeting.mp4
 ├── meeting.m4a
 └── transcript/
-    ├── meeting.txt
+    ├── meeting.srt
+    ├── meeting.whisperx.raw.srt
+    ├── meeting.clean-report.txt
     ├── _run-summary.txt
     └── _environment.txt
 ```
+
+`clean-report` 只會在 `clean` 模式實際執行 `srt-clean` 時產生。輸出 `txt` 時仍只產生
+原本的文字逐字稿。
 
 ## 注意事項
 
@@ -155,6 +179,10 @@ Meeting/
 - 可用 `--transcript-dir` 將 raw transcript 改寫到其他位置。
 - 預設語言是 `zh`；若音訊不是中文，請明確指定 `--language`。
 - `--language` 使用 Whisper / ISO 639-1 語言碼，例如 `zh`、`ja`、`en`、`ko`；`jp` 會自動轉成 `ja`。
+- `srt` 與 `all` 預設使用 `clean`；日文套用 `jp-adult-soft`，英文套用 `en-adult-soft`。
+- 其他語言預設只做詞級重切；也可用 `--subtitle-clean-profile` 明確指定 profile。
+- 找不到 `srt-clean` 時仍會保留詞級重切結果，不會讓轉錄失敗。
+- 若只想取得 WhisperX 原始 SRT，使用 `--subtitle-postprocess off`。
 - 使用 `--diarize` 前，需先確認 Hugging Face token 與 pyannote gated model 權限已可用。
 - `transcript/` 與本地測試目錄不應提交到 Git。
 - `media2md` 的 `--check` 不會執行正式轉錄或 polish。

@@ -1,10 +1,11 @@
 # 安裝程序
 
-這個專案提供一支 Bash 指令：
+這個專案提供兩支主要 Bash 指令與一個內部 Python 字幕處理入口：
 
 ```text
 transcribe-audio
 media2md
+transcribe-audio-subtitle
 ```
 
 用途是掃描目錄中的音檔與影片檔，必要時先抽音軌，再用 WhisperX 批次轉文字。
@@ -66,6 +67,9 @@ pip install whisperx
 
 ```text
 ~/bin/transcribe-audio
+~/bin/media2md
+~/bin/transcribe-audio-subtitle
+~/.venvs/transcribe-audio/
 ```
 
 執行：
@@ -100,6 +104,18 @@ bash install.sh --uninstall
 
 `install.sh` 不會自動修改 shell 設定檔。若安裝目錄不在 PATH，腳本會提示應加入的 `export PATH=...`。
 
+字幕後處理使用獨立的 `~/.venvs/transcribe-audio`，不會修改
+`~/.venvs/whisperx`。package 本身沒有額外 runtime dependency，安裝時不需要下載
+Python 套件。
+
+若要啟用 `clean` 模式的重複與幻覺清理，另行安裝 `srt-clean` 並確認：
+
+```bash
+srt-clean --help
+```
+
+未安裝 `srt-clean` 時，SRT 仍會完成詞級時間重切。
+
 `media2md` 會再呼叫 `transcript-polish`，因此若要使用一鍵產出 Markdown 的流程，還需要先安裝 `transcript-polish` 並讓它可在 PATH 中被找到。
 
 `transcribe-audio` 可用 `--transcript-dir` 改寫 raw transcript 輸出位置。
@@ -118,6 +134,9 @@ bash install.sh --uninstall
 ./bin/transcribe-audio --file a ./meeting
 ./bin/transcribe-audio --glob '會議*' ./meeting
 ./bin/transcribe-audio --regex '^A00[1-5]' ./meeting
+./bin/transcribe-audio --language ja --output-format srt ./meeting
+./bin/transcribe-audio --output-format srt --subtitle-postprocess split ./meeting
+./bin/transcribe-audio --output-format srt --subtitle-postprocess off ./meeting
 ./bin/transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 ./bin/media2md
 ./bin/media2md --check
@@ -131,7 +150,10 @@ bash install.sh --uninstall
 
 ## 6. 手動安裝成全域指令
 
-若不使用 `install.sh`，也可以手動複製：
+CR-004 加入 Python subtitle package 後，建議使用 `install.sh`。只手動複製 Bash
+檔案不足以啟用 SRT 後處理。
+
+若只使用 `--subtitle-postprocess off`，仍可手動複製：
 
 ```bash
 mkdir -p ~/bin
@@ -181,6 +203,12 @@ source "$HOME/.venvs/whisperx/bin/activate"
 pip install --upgrade whisperx
 ```
 
+若 Python 字幕 package 有更新，重新執行：
+
+```bash
+bash install.sh
+```
+
 ## 8. 驗證
 
 最小驗證：
@@ -190,6 +218,7 @@ transcribe-audio --help
 transcribe-audio --check
 media2md --help
 media2md --check
+transcribe-audio-subtitle --help
 ```
 
 若要驗證 diarization：
@@ -215,6 +244,14 @@ bash install.sh --uninstall
 ```
 
 這會同時移除 `transcribe-audio` 與 `media2md`。
+
+也會移除 `transcribe-audio-subtitle` wrapper，但預設保留：
+
+```text
+~/.venvs/transcribe-audio
+```
+
+若確定不再使用，可手動移除該 venv。
 
 移除 WhisperX 虛擬環境：
 

@@ -13,6 +13,7 @@ usage() {
   transcribe-audio --force [目錄]
   transcribe-audio --check [目錄]
   transcribe-audio --transcript-dir DIR [目錄]
+  transcribe-audio --subtitle-postprocess off|split|clean [目錄]
 
 說明：
   掃描指定目錄第一層的音檔與影片檔。
@@ -35,7 +36,11 @@ usage() {
                                 常見代碼例如：zh、ja、en、ko、fr、de、es
                                 以 Whisper / ISO 639-1 語言碼為準；jp 會自動轉成 ja
       --output-format FORMAT    指定輸出格式，預設 txt
-      --transcript-dir DIR    指定 transcript 輸出目錄，預設 transcript
+      --transcript-dir DIR      指定 transcript 輸出目錄，預設 transcript
+      --subtitle-postprocess MODE
+                                SRT 後處理：off|split|clean，預設 clean
+      --subtitle-clean-profile PROFILE
+                                覆寫 srt-clean profile
       --min-speakers N          diarize 時設定最小講者數
       --max-speakers N          diarize 時設定最大講者數
       --verbose                 顯示詳細資訊
@@ -50,6 +55,7 @@ usage() {
   transcribe-audio --regex '^A00[1-5]' ./meeting
   transcribe-audio --force "/mnt/d/Videos/Meeting"
   transcribe-audio --diarize --min-speakers 2 --max-speakers 6
+  transcribe-audio --output-format srt --subtitle-postprocess split ./meeting
   transcribe-audio --transcript-dir ../meeting.transcript "/mnt/d/Videos/Meeting"
 EOF
 }
@@ -66,6 +72,8 @@ model=""
 batch_size=""
 compute_type=""
 transcript_dir_spec=""
+subtitle_postprocess="clean"
+subtitle_clean_profile=""
 min_speakers=""
 max_speakers=""
 positional_count=0
@@ -73,6 +81,16 @@ selector_type=""
 selector_input=""
 selector_option_count=0
 all_matches=0
+declare -a subtitle_temp_dirs=()
+
+cleanup_subtitle_temp_dirs() {
+    local temp_dir
+    for temp_dir in "${subtitle_temp_dirs[@]}"; do
+        [[ -n "$temp_dir" ]] && rm -rf -- "$temp_dir"
+    done
+}
+
+trap cleanup_subtitle_temp_dirs EXIT
 
 while (($# > 0)); do
     case "$1" in
@@ -144,6 +162,16 @@ while (($# > 0)); do
             [[ $# -gt 0 ]] || { echo "錯誤：--transcript-dir 需要值。" >&2; exit 2; }
             transcript_dir_spec="$1"
             ;;
+        --subtitle-postprocess)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--subtitle-postprocess 需要值。" >&2; exit 2; }
+            subtitle_postprocess="$1"
+            ;;
+        --subtitle-clean-profile)
+            shift
+            [[ $# -gt 0 ]] || { echo "錯誤：--subtitle-clean-profile 需要值。" >&2; exit 2; }
+            subtitle_clean_profile="$1"
+            ;;
         --min-speakers)
             shift
             [[ $# -gt 0 ]] || { echo "錯誤：--min-speakers 需要值。" >&2; exit 2; }
@@ -194,6 +222,24 @@ case "$output_format" in
         ;;
 esac
 
+case "$subtitle_postprocess" in
+    off|split|clean) ;;
+    *)
+        echo "錯誤：--subtitle-postprocess 只接受 off、split、clean。" >&2
+        exit 2
+        ;;
+esac
+
+if [[ -n "$subtitle_clean_profile" && "$subtitle_postprocess" != "clean" ]]; then
+    echo "錯誤：--subtitle-clean-profile 只能搭配 --subtitle-postprocess clean。" >&2
+    exit 2
+fi
+
+needs_srt_postprocess=0
+if [[ "$subtitle_postprocess" != "off" && "$output_format" =~ ^(srt|all)$ ]]; then
+    needs_srt_postprocess=1
+fi
+
 case "$compute_type" in
     ""|default|float16|float32|int8) ;;
     *)
@@ -213,6 +259,32 @@ case "$language" in
         language="ja"
         ;;
 esac
+
+effective_subtitle_clean_profile="$subtitle_clean_profile"
+if [[ -z "$effective_subtitle_clean_profile" && "$subtitle_postprocess" == "clean" ]]; then
+    case "$language" in
+        ja) effective_subtitle_clean_profile="jp-adult-soft" ;;
+        en) effective_subtitle_clean_profile="en-adult-soft" ;;
+    esac
+fi
+
+SRT_CLEAN_RESOLVED=""
+if (( needs_srt_postprocess == 1 )) &&
+    [[ "$subtitle_postprocess" == "clean" ]] &&
+    [[ -n "$effective_subtitle_clean_profile" ]]; then
+    if [[ -n "${SRT_CLEAN_BIN:-}" ]]; then
+        if [[ -x "$SRT_CLEAN_BIN" ]]; then
+            SRT_CLEAN_RESOLVED="$SRT_CLEAN_BIN"
+        fi
+    elif command -v srt-clean >/dev/null 2>&1; then
+        SRT_CLEAN_RESOLVED="$(command -v srt-clean)"
+    elif [[ -x "$HOME/bin/srt-clean" ]]; then
+        SRT_CLEAN_RESOLVED="$HOME/bin/srt-clean"
+    fi
+    if [[ -z "$SRT_CLEAN_RESOLVED" ]]; then
+        echo "警告：找不到 srt-clean；本次只執行詞級字幕重切。" >&2
+    fi
+fi
 
 if (( selector_option_count > 1 )); then
     echo "錯誤：--file、--glob、--regex 互斥。" >&2
@@ -260,6 +332,30 @@ elif command -v python >/dev/null 2>&1; then
 else
     echo "錯誤：找不到 Python。" >&2
     exit 1
+fi
+
+SUBTITLE_BIN=""
+if (( needs_srt_postprocess == 1 )); then
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -n "${TRANSCRIBE_AUDIO_SUBTITLE_BIN:-}" ]]; then
+        SUBTITLE_BIN="$TRANSCRIBE_AUDIO_SUBTITLE_BIN"
+    elif [[ -x "$script_dir/transcribe-audio-subtitle" ]]; then
+        SUBTITLE_BIN="$script_dir/transcribe-audio-subtitle"
+    elif [[ -x "$HOME/.venvs/transcribe-audio/bin/transcribe-audio-subtitle" ]]; then
+        SUBTITLE_BIN="$HOME/.venvs/transcribe-audio/bin/transcribe-audio-subtitle"
+    elif [[ -x "$script_dir/../.venv/bin/transcribe-audio-subtitle" ]]; then
+        SUBTITLE_BIN="$script_dir/../.venv/bin/transcribe-audio-subtitle"
+    elif command -v transcribe-audio-subtitle >/dev/null 2>&1; then
+        SUBTITLE_BIN="$(command -v transcribe-audio-subtitle)"
+    else
+        echo "錯誤：SRT 後處理已啟用，但找不到 transcribe-audio-subtitle。" >&2
+        echo "請執行 bash install.sh，或使用 --subtitle-postprocess off。" >&2
+        exit 1
+    fi
+    if [[ ! -x "$SUBTITLE_BIN" ]]; then
+        echo "錯誤：字幕後處理入口不可執行：$SUBTITLE_BIN" >&2
+        exit 1
+    fi
 fi
 
 detect_runtime_info() {
@@ -1065,6 +1161,10 @@ echo "  compute_type=$effective_compute_type"
 echo "  batch_size=$effective_batch_size"
 echo "  language=$language"
 echo "  output_format=$output_format"
+echo "  subtitle_postprocess=$subtitle_postprocess"
+if [[ "$subtitle_postprocess" == "clean" ]]; then
+    echo "  subtitle_clean_profile=${effective_subtitle_clean_profile:-none}"
+fi
 echo
 
 if (( check_only == 1 )); then
@@ -1178,6 +1278,8 @@ failed_file="$transcript_dir/_failed-files.txt"
     echo "batch_size=$effective_batch_size"
     echo "language=$language"
     echo "output_format=$output_format"
+    echo "subtitle_postprocess=$subtitle_postprocess"
+    echo "subtitle_clean_profile=${effective_subtitle_clean_profile:-none}"
     echo "diarize=$diarize"
     echo "selector_type=${selector_type:-none}"
     echo "selector_input=${selector_input:-none}"
@@ -1209,7 +1311,19 @@ for input_file in "${transcription_queue[@]}"; do
             "$transcript_dir/$stem.srt" \
             "$transcript_dir/$stem.vtt" \
             "$transcript_dir/$stem.tsv" \
-            "$transcript_dir/$stem.aud"
+            "$transcript_dir/$stem.aud" \
+            "$transcript_dir/$stem.whisperx.raw.srt" \
+            "$transcript_dir/$stem.clean-report.txt"
+    fi
+
+    whisperx_output_format="$output_format"
+    whisperx_output_dir="$transcript_dir"
+    postprocess_temp_dir=""
+    if (( needs_srt_postprocess == 1 )) && [[ "$output_format" == "srt" ]]; then
+        postprocess_temp_dir="$(mktemp -d)"
+        subtitle_temp_dirs+=("$postprocess_temp_dir")
+        whisperx_output_format="all"
+        whisperx_output_dir="$postprocess_temp_dir"
     fi
 
     cmd=(
@@ -1220,8 +1334,8 @@ for input_file in "${transcription_queue[@]}"; do
         --device "$effective_device"
         --compute_type "$effective_compute_type"
         --batch_size "$effective_batch_size"
-        --output_format "$output_format"
-        --output_dir "$transcript_dir"
+        --output_format "$whisperx_output_format"
+        --output_dir "$whisperx_output_dir"
     )
 
     if (( diarize == 1 )); then
@@ -1248,6 +1362,42 @@ for input_file in "${transcription_queue[@]}"; do
     attempted_size_bytes=$((attempted_size_bytes + file_size_bytes))
 
     if "${cmd[@]}"; then
+        if (( needs_srt_postprocess == 1 )); then
+            raw_source="$whisperx_output_dir/$stem.srt"
+            json_source="$whisperx_output_dir/$stem.json"
+            raw_output="$transcript_dir/$stem.whisperx.raw.srt"
+            final_srt="$transcript_dir/$stem.srt"
+            if [[ ! -s "$raw_source" || ! -s "$json_source" ]]; then
+                echo "[失敗] ${input_file##*/}：WhisperX 未產生 SRT 或 JSON" >&2
+                echo -e "${input_file##*/}\tmissing_alignment_output" >> "$failed_file"
+                transcribe_failed=$((transcribe_failed + 1))
+                rm -rf -- "$postprocess_temp_dir"
+                continue
+            fi
+            rm -f -- "$raw_output"
+            mv -- "$raw_source" "$raw_output"
+            rm -f -- "$final_srt"
+            subtitle_cmd=(
+                "$SUBTITLE_BIN"
+                --input-json "$json_source"
+                --output "$final_srt"
+            )
+            if [[ "$subtitle_postprocess" == "clean" && -n "$SRT_CLEAN_RESOLVED" ]]; then
+                subtitle_cmd+=(
+                    --clean-profile "$effective_subtitle_clean_profile"
+                    --clean-report "$transcript_dir/$stem.clean-report.txt"
+                    --cleaner-bin "$SRT_CLEAN_RESOLVED"
+                )
+            fi
+            if ! "${subtitle_cmd[@]}"; then
+                echo "[失敗] ${input_file##*/}：字幕後處理失敗；raw SRT 已保留" >&2
+                echo -e "${input_file##*/}\tsubtitle_postprocess_failed" >> "$failed_file"
+                transcribe_failed=$((transcribe_failed + 1))
+                rm -rf -- "$postprocess_temp_dir"
+                continue
+            fi
+        fi
+        rm -rf -- "$postprocess_temp_dir"
         if [[ -s "$primary_output" ]]; then
             echo "[完成] ${primary_output##*/}"
             transcribe_success=$((transcribe_success + 1))
@@ -1257,6 +1407,7 @@ for input_file in "${transcription_queue[@]}"; do
             transcribe_failed=$((transcribe_failed + 1))
         fi
     else
+        rm -rf -- "$postprocess_temp_dir"
         echo "[失敗] ${input_file##*/}" >&2
         echo -e "${input_file##*/}\twhisperx_failed" >> "$failed_file"
         transcribe_failed=$((transcribe_failed + 1))
@@ -1329,6 +1480,8 @@ processing_speed_x="$(format_ratio "$attempted_duration_ms" "$run_duration_ms")"
     echo "batch_size=$effective_batch_size"
     echo "language=$language"
     echo "output_format=$output_format"
+    echo "subtitle_postprocess=$subtitle_postprocess"
+    echo "subtitle_clean_profile=${effective_subtitle_clean_profile:-none}"
     echo "diarize=$diarize"
     echo "selector_type=${selector_type:-none}"
     echo "selector_input=${selector_input:-none}"
